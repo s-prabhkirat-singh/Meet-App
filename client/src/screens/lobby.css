@@ -1,0 +1,130 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.lobby {
+  font-family: 'Roboto', Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+  padding: 20px;
+  color: #fff;
+  overflow-y: auto;
+}
+
+.lobby h1 {
+  color: #ffffff;
+  font-size: clamp(2em, 5vw, 3em);
+  margin-bottom: 30px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+  animation: slideDown 1s ease-in-out;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.lobby form {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: clamp(20px, 5vw, 40px);
+  border-radius: 20px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 400px;
+  animation: fadeIn 1s ease-in;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.lobby label {
+  display: block;
+  margin-bottom: 12px;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 1.1em;
+  letter-spacing: 0.5px;
+}
+
+.lobby input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 25px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.lobby input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lobby input:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.lobby button {
+  background-color: #ffffff;
+  color: #6a11cb;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.lobby button:hover {
+  background-color: #f0f0f0;
+  transform: translateY(-2px);
+  box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .lobby form {
+    width: 95%;
+  }
+  
+  .lobby h1 {
+    margin-bottom: 20px;
+  }
+  
+  .lobby input, .lobby button {
+    font-size: 16px;
+  }
+}
