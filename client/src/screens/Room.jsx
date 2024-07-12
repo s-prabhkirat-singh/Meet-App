@@ -3,163 +3,213 @@ import ReactPlayer from "react-player";
 import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
 import './room.css';
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 const Room = () => {
   const socket = useSocket();
-  const [remoteSocketId, setRemoteSocketId] = useState(null);
+  const [remoteUsers, setRemoteUsers] = useState(new Map());
   const [myStream, setMyStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  const [callActive, setCallActive] = useState(false);
+  const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const navigate = useNavigate()
-  const {email} = useParams() ;
-  const handleUserJoined = useCallback(({ emailId, id }) => {
-    
-    console.log(`Email ${emailId} joined room`);
-    setRemoteSocketId(id);
-    
-    
-  }, []);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [activeCalls, setActiveCalls] = useState({});
 
-
- 
-  
-
-  const handleCallUser = useCallback(async () => {
-    console.log(`Email ${1} joined room`);
-    
-    const offer = await peer.getOffer();
-    socket.emit("user:call", { to: remoteSocketId, offer });
-    setCallActive(true);
-  }, [remoteSocketId, socket]);
+  const [searchParams] = useSearchParams();
+  const { email, roomId } = useParams();
 
 
 
-  const turnVideoOn = useCallback(async () => {
-    // console.log(`Email ${2} joined room`);
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    
-    setMyStream(stream);
-  }, [myStream]);
-
-  useEffect(() => {
-   
-    turnVideoOn(); // Initialize the local stream when the component mounts
-  }, [turnVideoOn]);
-useEffect(() => {
-  socket.emit('new:user', {remoteSocketId})
-  
-
-
-  
-}, [remoteSocketId])
-
-  useEffect(() => {
-    
-    socket.on('video:on', turnVideoOn);
-
-    return () => {
-      socket.off('video:on', turnVideoOn);
-    };
-  }, [socket, turnVideoOn]);
-
-  const handleIncommingCall = useCallback(
-    async ({ from, offer }) => {
-      setRemoteSocketId(from);
-      const ans = await peer.getAnswer(offer);
-      socket.emit("call:accepted", { to: from, ans });
-      setCallActive(true);
-    },
-    [socket]
-  );
-
-  const sendStreams = useCallback(() => {
-    if (myStream) {
-      for (const track of myStream.getTracks()) {
-        peer.peer.addTrack(track, myStream);
-      }
+  const handleUserJoined = useCallback(({ emailId, id, admin }) => {
+    console.log(`Email ${emailId} joined room`, admin);
+    if (admin !== "1") {
+      setRemoteUsers(prev => new Map(prev).set(id, { emailId, id }));
     }
-  }, [myStream]);
-
-  const handleCallAccepted = useCallback(
-    ({ from, ans }) => {
-      peer.setLocalDescription(ans);
-      sendStreams();
-    },
-    [sendStreams]
-  );
-
-  const handleNegoNeeded = useCallback(async () => {
-    const offer = await peer.getOffer();
-    socket.emit("peer:nego:needed", { offer, to: remoteSocketId });
-  }, [remoteSocketId, socket]);
-
-  useEffect(() => {
-    peer.peer.addEventListener("negotiationneeded", handleNegoNeeded);
-    return () => {
-      peer.peer.removeEventListener("negotiationneeded", handleNegoNeeded);
-    };
-  }, [handleNegoNeeded]);
-
-  const handleNegoNeedIncomming = useCallback(
-    async ({ from, offer }) => {
-      const ans = await peer.getAnswer(offer);
-      socket.emit("peer:nego:done", { to: from, ans });
-    },
-    [socket]
-  );
-
-  const handleNegoNeedFinal = useCallback(async ({ ans }) => {
-    await peer.setLocalDescription(ans);
   }, []);
 
-  useEffect(() => {
-   
-    socket.emit('add:user', {email})
-    socket.emit('enter:room',{email})
-    peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams[0];
-      setRemoteStream(remoteStream);
+
+
+  const addRemoteStream = useCallback((userId, stream) => {
+    console.log("Adding remote stream", stream);
+    setRemoteStreams(prev => new Map(prev).set(userId, stream));
+  }, [, setRemoteStreams]);
+
+
+
+
+
+
+  const handleCallUser = useCallback(async (userId) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      setMyStream(stream);
+      const offer = await peer.getOffer(userId);
+      socket.emit("user:call", { to: userId, offer });
+
+      const peerInstance = peer.getPeer(userId);
+
+      console.log(`This is my userID whom i am calling ${userId}`)
+      peerInstance.ontrack = (ev) => {
+        const remoteStream = ev.streams[0];
+        console.log("Received remote stream", remoteStream);
+        addRemoteStream(userId, remoteStream);
+      };
+
+      stream.getTracks().forEach(track => {
+        peerInstance.addTrack(track, stream);
+      });
+    } catch (error) {
+      console.error("Error in handleCallUser:", error);
+    }
+  }, [addRemoteStream]);
+
+
+
+
+
+
+  const handleIncomingCall = useCallback(({ from, offer }) => {
+    setIncomingCall({ from, offer });
+  }, []);
+
+
+
+
+
+  const acceptCall = useCallback(async () => {
+    if (!incomingCall) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      setMyStream(stream);
+
+      const ans = await peer.getAnswer(incomingCall.from, incomingCall.offer);
+      socket.emit("call:accepted", { to: incomingCall.from, ans });
+
+      const peerInstance = peer.getPeer(incomingCall.from);
+      peerInstance.ontrack = (ev) => {
+        const remoteStream = ev.streams[0];
+        addRemoteStream(incomingCall.from, remoteStream);
+      };
+
+      stream.getTracks().forEach(track => {
+        peerInstance.addTrack(track, stream);
+      });
+
+      setActiveCalls(prev => ({ ...prev, [incomingCall.from]: true }));
+      setIncomingCall(null);
+    } catch (error) {
+      console.error("Error in acceptCall:", error);
+    }
+  }, [incomingCall, socket, addRemoteStream]);
+
+
+
+
+
+
+  const handleCallAccepted = useCallback(async ({ from, ans }) => {
+    await peer.setRemoteDescription(from, ans);
+    console.log("Call Accepted!");
+    setActiveCalls(prev => ({ ...prev, [from]: true }));
+  }, []);
+
+
+
+
+  const handleNegoNeeded = useCallback(async (userId) => {
+    const offer = await peer.getOffer(userId);
+    socket.emit("peer:nego:needed", { to: userId, offer });
+  }, [socket]);
+
+
+
+
+
+  const handleNegoNeedIncoming = useCallback(async ({ from, offer }) => {
+    const ans = await peer.getAnswer(from, offer);
+    socket.emit("peer:nego:done", { to: from, ans });
+  }, [socket]);
+
+
+
+
+  const handleNegoNeedFinal = useCallback(async ({ from, ans }) => {
+    await peer.setRemoteDescription(from, ans);
+  }, []);
+
+
+
+
+  const endCall = useCallback((userId) => {
+    peer.closeConnection(userId);
+    setActiveCalls(prev => {
+      const newActiveCalls = { ...prev };
+      delete newActiveCalls[userId];
+      return newActiveCalls;
+    });
+    setRemoteStreams(prev => {
+      const newStreams = new Map(prev);
+      newStreams.delete(userId);
+      return newStreams;
     });
   }, []);
 
-  
-
-  const endCall = useCallback(() => {
-    peer.peer.close();
-    setCallActive(false);
-    setRemoteSocketId(null);
-    setRemoteStream(null);
-  }, []);
+  const handleUserLeft = useCallback((userId) => {
+    setRemoteUsers(prev => {
+      const newUsers = new Map(prev);
+      newUsers.delete(userId);
+      return newUsers;
+    });
+    endCall(userId);
+  }, [endCall]);
 
   useEffect(() => {
-    
+    socket.connect();
+    const admin = searchParams.get('isAdmin');
+
+    console.log("empty useEffect")
+    socket.emit('check:admin', useSearchParams)
+
+    socket.emit('add:user', { email });
+    socket.emit('enter:room', { email, roomId, admin });
+
     socket.on("user:joined", handleUserJoined);
-    socket.on("incomming:call", handleIncommingCall);
+    socket.on("incomming:call", handleIncomingCall);
     socket.on("call:accepted", handleCallAccepted);
-    socket.on("peer:nego:needed", handleNegoNeedIncomming);
+    socket.on("peer:nego:needed", handleNegoNeedIncoming);
     socket.on("peer:nego:final", handleNegoNeedFinal);
+    socket.on("user:left", handleUserLeft);
 
     return () => {
       socket.off("user:joined", handleUserJoined);
-      socket.off("incomming:call", handleIncommingCall);
+      socket.off("incomming:call", handleIncomingCall);
       socket.off("call:accepted", handleCallAccepted);
-      socket.off("peer:nego:needed", handleNegoNeedIncomming);
+      socket.off("peer:nego:needed", handleNegoNeedIncoming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
+      socket.off("user:left", handleUserLeft);
     };
-  }, [
-    socket,
-    handleUserJoined,
-    handleIncommingCall,
+  }, [handleUserJoined,
+    handleIncomingCall,
     handleCallAccepted,
-    handleNegoNeedIncomming,
+    handleNegoNeedIncoming,
     handleNegoNeedFinal,
+    handleUserLeft,
+
   ]);
+
+  useEffect(() => {
+    remoteUsers.forEach((user, userId) => {
+      const peerInstance = peer.getPeer(userId);
+      peerInstance.onnegotiationneeded = () => handleNegoNeeded(userId);
+    });
+  }, [remoteUsers, handleNegoNeeded]);
 
   const toggleAudio = useCallback(() => {
     if (myStream) {
@@ -183,25 +233,32 @@ useEffect(() => {
     <div className="room">
       <header className="room-header">
         <h1>Video Chat Room</h1>
-        <h4>{remoteSocketId ? "Connected" : "No one in room"}</h4>
+        <h4>{remoteUsers.size > 0 ? `${remoteUsers.size} user(s) in room` : "No one in room"}</h4>
       </header>
       <div className="controls">
-        {remoteSocketId && !callActive && (
-          <button className="call-button" onClick={handleCallUser}>Call</button>
-        )}
+        {Array.from(remoteUsers.values()).map(({ id }) => (
+          <button
+            key={`user-${id}`}
+            className="call-button"
+            onClick={() => handleCallUser(id)}
+            disabled={activeCalls[id]}
+          >
+            Call User {id}
+          </button>
+        ))}
         <button className="toggle-button" onClick={toggleAudio}>
           {audioEnabled ? 'Mute Audio' : 'Unmute Audio'}
         </button>
         <button className="toggle-button" onClick={toggleVideo}>
           {videoEnabled ? 'Disable Video' : 'Enable Video'}
         </button>
-        {callActive && (
-          <>
-            <button className="stream-button" onClick={sendStreams}>Send Stream</button>
-            <button className="end-button" onClick={endCall}>End Call</button>
-          </>
-        )}
       </div>
+      {incomingCall && (
+        <div className="incoming-call">
+          <p>Incoming call from {incomingCall.from}</p>
+          <button onClick={acceptCall}>Accept</button>
+        </div>
+      )}
       <div className="video-container">
         {myStream && (
           <div className="video">
@@ -216,19 +273,20 @@ useEffect(() => {
             />
           </div>
         )}
-        {remoteStream && (
-          <div className="video">
-            <h2>Remote Stream</h2>
+        {Array.from(remoteStreams.entries()).map(([userId, stream]) => (
+          <div key={`stream-${userId}`} className="video">
+            <h2>Remote Stream ({userId})</h2>
             <ReactPlayer
               className="video-player"
               playing
               muted={false}
               height="200px"
               width="300px"
-              url={remoteStream}
+              url={stream}
             />
+            <button className="end-button" onClick={() => endCall(userId)}>End Call</button>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ const Lobby = () => {
       e.preventDefault();
       
       socket.emit("create:room", {email, meetLink})
-      socket.emit('enter:room',{email,meetLink})
+      
     },
     [email, socket]
   );
@@ -29,18 +29,22 @@ const Lobby = () => {
   const handleJoinRoom = useCallback(
     (data) => {
       const { email, meetLink } = data;
+      console.log("hey trher")
       console.log(email)
       console.log(meetLink)
      
       setMeetLink(meetLink)
       
-      navigate(`/room/${meetLink}/${email}`);
+      navigate(`/room/${meetLink}/${email}?isAdmin=1`);
      
     },
     [navigate]
   );
 
   useEffect(() => {
+    socket.on("user:joined", () =>{
+      console.log(`User Joined Called`)
+    });
     
     socket.on("room:join", handleJoinRoom);
     return () => {
